@@ -31,71 +31,92 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Tag {
+    public static ArrayList<String> tags = new ArrayList<>();//Итоговый список тегов
+
+    public static String line;//Эти строки будем заносить в список tags
+
+    public static String fileResult;//Сюда читаем содержимое файла
+
+    public static boolean mistake = false;//Ошибка, количество открытых тегов не равно количеству закрытых
+
+    public static String openTag (String tagName) { //Форимируем открытый тег
+        String openTag = "<" + tagName + "((>)|(\\s+?.*?>))";
+        return openTag;
+    }
+
+    public static String closeTag (String tagName) { //Форимируем закрытый тег
+        String closeTag = "</" + tagName + ">";
+        return closeTag;
+    }
+
+    public static int tagSum (String line, String regex) { //Подсчитываем сумму тегов (regex - открытые или закрытые)
+        int tagSum = 0;
+        while (line.matches(".*?" + regex + ".*?")) { //Вот зачем .* перед и после
+            tagSum ++;
+            line = line.replaceFirst(regex, "");
+        }
+        return tagSum;
+    }
+
+    public static void outLine (String tagName) {
+        Pattern patternOpenTag = Pattern.compile(openTag(tagName));
+        Matcher matcherOpenTag;
+        matcherOpenTag = patternOpenTag.matcher(fileResult);
+        while (matcherOpenTag.find()) {
+            line = matcherOpenTag.group();
+            fileResult = fileResult.substring(matcherOpenTag.end(), fileResult.length());
+            moreClosed(tagName);
+            if (mistake) break;
+            else tags.add(line);
+            matcherOpenTag = patternOpenTag.matcher(fileResult);
+        }
+    }
+
+    public static void moreClosed(String tagName) {
+        Pattern patternCloseTag = Pattern.compile(".*?" + closeTag(tagName));
+        Matcher matcherCloseTag;
+        int openTag = tagSum(line, openTag(tagName));
+        int closeTag = tagSum(line, closeTag(tagName));
+        while (openTag > closeTag) {
+            matcherCloseTag = patternCloseTag.matcher(fileResult);
+            if (matcherCloseTag.find()) {
+                line += matcherCloseTag.group();
+                fileResult = fileResult.substring(matcherCloseTag.end(), fileResult.length());
+                closeTag++;
+                //Так как матч по закрытому тегу мог захватить новый открытый тег, то пересчитываем количество открытых тегов
+                openTag = tagSum(line, openTag(tagName));
+            }
+            else {
+                mistake = true;
+                break;
+            }
+        }
+    }
+
     public static void main(String[] args) {
         String tag = args[0];
 
-        String regex_some_Begin_one_End_tag = "<" + tag + "((>)|(\\s+?.*?>)).*?</" + tag + ">";//Матчим выражение с первого открытого
-        //тега до первого закрытого тега (при этом открытых в конечном выражении может быть несколько, а закрытый захватываем первый)
+        String regexSomeBeginOneEndTag = "<" + tag + "((>)|(\\s+?.*?>)).*?</" + tag + ">";
 
         String regexBegin = ".*?<" + tag + "((>)|(\\s+?.*?>)).*?";
 
-        String regexEnd = ".*?</" + tag + ">";//Матчим от одного закрытого тега до следующего закрытого тега, захватывая текст между ними
+        String regexEnd = ".*?</" + tag + ">";
 
-        ArrayList<String> list = new ArrayList();//Список тегов, по нему формируем вывод результата
-
-        Pattern pattern_some_Begin_one_End_tag = Pattern.compile(regex_some_Begin_one_End_tag);
+        Pattern pattern_some_Begin_one_End_tag = Pattern.compile(regexSomeBeginOneEndTag);
         Pattern pattern_Text_one_End_tag = Pattern.compile(regexEnd);
 
         try (BufferedReader reader     = new BufferedReader(new InputStreamReader(System.in));
              BufferedReader filereader = new BufferedReader(new FileReader(reader.readLine()))) {
             String line = "";
-            String result = "";
             while ((line = filereader.readLine()) != null) {
-                result += line;
+                fileResult += line;
             }
-            Matcher matcherall = pattern_some_Begin_one_End_tag.matcher(result);
-            Matcher matcherend = pattern_Text_one_End_tag.matcher(result);
 
-            while (matcherall.find()) {
-                int sum_tagBegin = 1;//Количество открытых тегов в текущем поиске
-                int sum_tagEnd = 1;//Количество закрытых тегов в текущем поиске
-                boolean crush = false;//Ошибка, количество открытых тегов не совпадает с количеством закрытых
+            Matcher matcherall = pattern_some_Begin_one_End_tag.matcher(fileResult);
+            Matcher matcherend = pattern_Text_one_End_tag.matcher(fileResult);
+            outLine(tag);
 
-                String sout = matcherall.group();//Этой строкой формируем наш список
-
-                matcherend.find();//Здесь подгоняем поиск по закрытому тегу к общему поиску, чтобы оба поиска стартовали с одного места.
-                matcherend.group();
-
-                //Удаляя открытые теги подсчитываем их количество
-                String tagBegin = sout.replaceFirst(regexBegin, "");
-                while (tagBegin.matches(regexBegin)) {
-                    sum_tagBegin ++;
-                    tagBegin = tagBegin.replaceFirst(regexBegin, "");
-                }
-
-                while (sum_tagBegin > sum_tagEnd)
-                {
-                    if (matcherend.find()) {
-                        String tagEnd = matcherend.group();
-                        sout += tagEnd;
-                        sum_tagEnd ++;
-                        //Если поиск по закрытому тегу захватил новый открытый тег (пересчитываем количество, подгоняем поиски)
-                        while (tagEnd.matches(regexBegin)) {
-                            matcherall.find();//Здесь подгоняем общий поиск к поиску по закрытому тегу, чтобы оба поиска стартовали с одного места.
-                            matcherall.group();
-                            sum_tagBegin ++;
-                            tagEnd = tagEnd.replaceFirst(regexBegin, "");
-                        }
-                    }
-                    else {
-                        crush = true;
-                        break;
-                    }
-                }
-                if (crush) break;
-                else list.add(sout);
-            }
-            for (String vivod : list) // Вывод хромает, если вложенность > 3
+            for (String vivod : tags) // Вывод хромает, если вложенность > 3 .вынести в функцию
             {
                 System.out.println(vivod);
                 vivod = vivod.replaceFirst(regexBegin, "");//Будем убирать по одному открытому тегу и выводить вложенные
