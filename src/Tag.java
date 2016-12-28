@@ -31,15 +31,12 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Tag {
-    public static ArrayList<String> tags = new ArrayList<>();//Итоговый список тегов
-
-    public boolean mistake = false;//Ошибка, количество открытых тегов не равно количеству закрытых
-    public String tagName;
-    public String openTag;
-    public String closeTag;
-    public String tagLine;//Строка для хранения промежуточного результата
+    private static ArrayList<String> tags = new ArrayList<>();//Итоговый список тегов
+    private boolean mistake = false;//Ошибка, количество открытых тегов не равно количеству закрытых
+    private String openTag;
+    private String closeTag;
+    private String tagLine;//Строка для хранения промежуточного результата
     public Tag (String tagName) {
-        this.tagName = tagName;
         openTag = makeOpenTag(tagName);
         closeTag = makeCloseTag(tagName);
     }
@@ -59,60 +56,39 @@ public class Tag {
         }
         return sum;
     }
-    public void makeTagLine (String lineForFound) {
-        int currentIndex = 0;//Текущая позиция в поисковом выражении для строки lineForFound
+    public void makeTagLine (String baseLine) {
+        int index = 0;//Текущая позиция в поисковом выражении для строки baseLine
         Pattern patternOpenTag = Pattern.compile(openTag);
-        Matcher matcherOpenTag;
-        matcherOpenTag = patternOpenTag.matcher(lineForFound);
-        while (matcherOpenTag.find() && !mistake) {
+        Matcher matcherOpenTag = patternOpenTag.matcher(baseLine);
+        while (matcherOpenTag.find(index) && !mistake) {
             tagLine = matcherOpenTag.group();
-            currentIndex = matcherOpenTag.end();
-            //Подрезаем строку, чтобы метод поиска по закрытому тегу повторно не захватил начало строки
-            lineForFound = lineForFound.substring(currentIndex, lineForFound.length());
-            currentIndex = makeMoreClosed(lineForFound);
-            //Подрезаем строку, чтобы текущий метод поиска повторно не захватил то, что было добавлено методом makeMoreClosed()
-            lineForFound = lineForFound.substring(currentIndex, lineForFound.length());
+            index = makeMoreClosed(baseLine, matcherOpenTag.end());
             if (!mistake) tags.add(tagLine);
-            matcherOpenTag = patternOpenTag.matcher(lineForFound);
+            tagLine = tagLine.replaceFirst(openTag, "");
+            if (tagSum(tagLine, openTag) > 0)
+                makeTagLine(tagLine);
         }
     }
-    public int makeMoreClosed(String matcherLine) {
-        int currentIndex = 0;//Текущая позиция в поисковом выражении для строки matcherLine
+    public int makeMoreClosed(String baseLine, int index) {
         Pattern patternCloseTag = Pattern.compile(".*?" + closeTag);
-        Matcher matcherCloseTag = patternCloseTag.matcher(matcherLine);
+        Matcher matcherCloseTag = patternCloseTag.matcher(baseLine);
         int openTagSum = tagSum(tagLine, openTag);
         int closeTagSum = tagSum(tagLine, closeTag);
         while (openTagSum > closeTagSum && !mistake) {
-            if (matcherCloseTag.find()) {
+            if (matcherCloseTag.find(index)) {
                 tagLine += matcherCloseTag.group();
-                currentIndex = matcherCloseTag.end();
+                index = matcherCloseTag.end();
                 closeTagSum++;
                 //Так как матч по закрытому тегу мог захватить новый открытый тег, то пересчитываем количество открытых тегов
                 openTagSum = tagSum(tagLine, openTag);
             }
-            else {
-                mistake = true;
-            }
+            else mistake = true;
         }
-        return currentIndex;
+        return index;
     }
-    public void printResult (String lineForFound) {
-        int currentIndex = 0;//Текущая позиция в поисковом выражении для строки lineForFound
-        Pattern patternOpenTag = Pattern.compile(openTag);
-        Matcher matcherOpenTag;
-        lineForFound = lineForFound.replaceFirst(openTag, "");//Убираем первый открытый тег
-        matcherOpenTag = patternOpenTag.matcher(lineForFound);
-        while (matcherOpenTag.find() && !mistake) {
-            tagLine = matcherOpenTag.group();
-            currentIndex = matcherOpenTag.end();
-            lineForFound = lineForFound.substring(currentIndex, lineForFound.length());
-            currentIndex = makeMoreClosed(lineForFound);
-            lineForFound = lineForFound.substring(currentIndex, lineForFound.length());
-            if (!mistake) System.out.println(tagLine);
-            if (tagSum(tagLine, openTag) > 1) {
-                printResult(tagLine);
-            }
-            matcherOpenTag = patternOpenTag.matcher(lineForFound);
+    public void printResult () {
+        for (String s: tags){
+            System.out.println(s);
         }
     }
     public static void main(String[] args) {
@@ -126,10 +102,7 @@ public class Tag {
             }
             Tag first = new Tag(tag);
             first.makeTagLine(fileContent);
-            for (String s: tags){
-                System.out.println(s);
-                first.printResult(s);
-            }
+            first.printResult();
         } catch (Exception e) {
             System.out.println(e.getStackTrace());
         }
