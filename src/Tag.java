@@ -33,10 +33,13 @@ import java.util.regex.Pattern;
 public class Tag {
     private static ArrayList<String> tags = new ArrayList<>();//Итоговый список тегов
     private boolean mistake = false;//Ошибка, количество открытых тегов не равно количеству закрытых
+    private String tagName;
     private String openTag;
     private String closeTag;
-    private String tagLine;//Строка для хранения промежуточного результата
-    public Tag (String tagName) {
+    private String fileContent;//Файл-строка, в которой ищем теги
+    public Tag (String tagName, String fileContent) {
+        this.tagName = tagName;
+        this.fileContent = fileContent;
         openTag = makeOpenTag(tagName);
         closeTag = makeCloseTag(tagName);
     }
@@ -56,31 +59,41 @@ public class Tag {
         }
         return sum;
     }
-    public void makeTagLine (String baseLine) {
-        int index = 0;//Текущая позиция в поисковом выражении для строки baseLine
+    public ArrayList<String> makeTagLine () {
+        int index = 0;
+        String tagLine;
+        ArrayList<String> result = new ArrayList<>();
         Pattern patternOpenTag = Pattern.compile(openTag);
-        Matcher matcherOpenTag = patternOpenTag.matcher(baseLine);
+        Matcher matcherOpenTag = patternOpenTag.matcher(fileContent);
         while (matcherOpenTag.find(index) && !mistake) {
-            tagLine = matcherOpenTag.group();
-            index = makeMoreClosed(baseLine, matcherOpenTag.end());
-            if (!mistake) tags.add(tagLine);
-            tagLine = tagLine.replaceFirst(openTag, "");
-            if (tagSum(tagLine, openTag) > 0)
-                makeTagLine(tagLine);
+            tagLine = matcherOpenTag.group();//Захватили один открытый тег
+            int startIndex = matcherOpenTag.end();
+            int endIndex = makeMoreClosed(startIndex);
+            if (!mistake) {
+                tagLine += fileContent.substring(startIndex, endIndex);
+                result.add(tagLine);
+                tagLine = tagLine.replaceFirst(openTag, "");
+                if (tagSum(tagLine, openTag) > 0) {
+                    result.addAll(new Tag(tagName, tagLine).makeTagLine());
+                }
+            }
+            index = endIndex;
         }
+        return result;
     }
-    public int makeMoreClosed(String baseLine, int index) {
+    public int makeMoreClosed(int index) {
+        int openTagSum = 1;
+        int closeTagSum = 0;
+        String tagLine = "";
         Pattern patternCloseTag = Pattern.compile(".*?" + closeTag);
-        Matcher matcherCloseTag = patternCloseTag.matcher(baseLine);
-        int openTagSum = tagSum(tagLine, openTag);
-        int closeTagSum = tagSum(tagLine, closeTag);
+        Matcher matcherCloseTag = patternCloseTag.matcher(fileContent);
         while (openTagSum > closeTagSum && !mistake) {
             if (matcherCloseTag.find(index)) {
                 tagLine += matcherCloseTag.group();
                 index = matcherCloseTag.end();
                 closeTagSum++;
                 //Так как матч по закрытому тегу мог захватить новый открытый тег, то пересчитываем количество открытых тегов
-                openTagSum = tagSum(tagLine, openTag);
+                openTagSum = tagSum(tagLine, openTag) + 1;
             }
             else mistake = true;
         }
@@ -100,8 +113,8 @@ public class Tag {
             while ((line = filereader.readLine()) != null) {
                 fileContent += line;
             }
-            Tag first = new Tag(tag);
-            first.makeTagLine(fileContent);
+            Tag first = new Tag(tag, fileContent);
+            tags = first.makeTagLine();
             first.printResult();
         } catch (Exception e) {
             System.out.println(e.getStackTrace());
